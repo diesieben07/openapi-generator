@@ -2513,11 +2513,23 @@ public class DefaultCodegen implements CodegenConfig {
             // end of code block for composed schema
         } else {
             m.dataType = getSchemaType(schema);
-            if (schema.getEnum() != null && !schema.getEnum().isEmpty()) {
-                m.isEnum = true;
-                // comment out below as allowableValues is not set in post processing model enum
-                m.allowableValues = new HashMap<String, Object>();
-                m.allowableValues.put("values", schema.getEnum());
+            boolean canBeNull;
+            if (schema.getEnum() != null) {
+                List<?> allowableValues = schema.getEnum();
+                if (allowableValues.contains(null)) {
+                    allowableValues = allowableValues.stream().filter(Objects::nonNull).collect(Collectors.toList());
+                    canBeNull = true;
+                } else {
+                    canBeNull = false;
+                }
+                if (!allowableValues.isEmpty()) {
+                    m.isEnum = true;
+                    // comment out below as allowableValues is not set in post processing model enum
+                    m.allowableValues = new HashMap<String, Object>();
+                    m.allowableValues.put("values", schema.getEnum());
+                }
+            } else {
+                canBeNull = true;
             }
             if (ModelUtils.isMapSchema(schema)) {
                 addAdditionPropertiesToCodeGenModel(m, schema);
@@ -2554,7 +2566,7 @@ public class DefaultCodegen implements CodegenConfig {
                 addAdditionPropertiesToCodeGenModel(m, schema);
             }
 
-            if (Boolean.TRUE.equals(schema.getNullable())) {
+            if (Boolean.TRUE.equals(schema.getNullable()) && canBeNull) {
                 m.isNullable = Boolean.TRUE;
             }
 
@@ -3263,18 +3275,26 @@ public class DefaultCodegen implements CodegenConfig {
         }
 
         //Inline enum case:
-        if (p.getEnum() != null && !p.getEnum().isEmpty()) {
-            List<Object> _enum = p.getEnum();
-            property._enum = new ArrayList<String>();
-            for (Object i : _enum) {
-                property._enum.add(String.valueOf(i));
+        if (p.getEnum() != null) {
+            List<?> _enum = p.getEnum();
+            if (_enum.contains(null)) {
+                _enum = _enum.stream().filter(Objects::nonNull).collect(Collectors.toList());
+            } else {
+                // property cannot be null when enum does not explicitly list null
+                property.isNull = false;
             }
-            property.isEnum = true;
+            if (!_enum.isEmpty()) {
+                property._enum = new ArrayList<String>();
+                for (Object i : _enum) {
+                    property._enum.add(String.valueOf(i));
+                }
+                property.isEnum = true;
 
-            Map<String, Object> allowableValues = new HashMap<String, Object>();
-            allowableValues.put("values", _enum);
-            if (allowableValues.size() > 0) {
-                property.allowableValues = allowableValues;
+                Map<String, Object> allowableValues = new HashMap<String, Object>();
+                allowableValues.put("values", _enum);
+                if (allowableValues.size() > 0) {
+                    property.allowableValues = allowableValues;
+                }
             }
         }
 
